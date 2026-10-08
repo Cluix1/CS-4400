@@ -54,10 +54,27 @@ void naive_complex(int dim, pixel *src, pixel *dest)
  * complex - Your current working version of complex
  * IMPORTANT: This is the version you will be graded on
  */
-char complex_descr[] = "complex: Current working version";
+char complex_descr[] = "complex: 32x32 blocked rotate, mirror, and grayscale";
 void complex(int dim, pixel *src, pixel *dest)
 {
-  naive_complex(dim, src, dest);
+  int ii, jj, i, j;
+
+  /* Blocking keeps both the source rows and destination rows in cache. */
+  for (ii = 0; ii < dim; ii += 32)
+    for (jj = 0; jj < dim; jj += 32)
+      for (i = ii; i < ii + 32; i++) {
+        pixel *s = src + RIDX(i, jj, dim);
+        pixel *d = dest + RIDX(dim - jj - 1, dim - i - 1, dim);
+
+        for (j = 0; j < 32; j++) {
+          unsigned short gray = (unsigned short)
+            (((int)s[j].red + (int)s[j].green + (int)s[j].blue) / 3);
+          d->red = gray;
+          d->green = gray;
+          d->blue = gray;
+          d -= dim;
+        }
+      }
 }
 
 /*********************************************************************
