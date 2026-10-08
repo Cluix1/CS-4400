@@ -155,10 +155,117 @@ void naive_motion(int dim, pixel *src, pixel *dst)
  * motion - Your current working version of motion. 
  * IMPORTANT: This is the version you will be graded on
  */
-char motion_descr[] = "motion: Current working version";
+char motion_descr[] = "motion: sliding 3x3 component sums";
 void motion(int dim, pixel *src, pixel *dst) 
 {
-  naive_motion(dim, src, dst);
+  int i, j;
+
+  /* The common case has a complete 3 by 3 block.  Keep its running
+     component sums and replace one column as the block moves right. */
+  for (i = 0; i < dim - 2; i++) {
+    pixel *r0 = src + RIDX(i, 0, dim);
+    pixel *r1 = r0 + dim;
+    pixel *r2 = r1 + dim;
+    pixel *d = dst + RIDX(i, 0, dim);
+    int red = r0[0].red + r0[1].red + r0[2].red +
+              r1[0].red + r1[1].red + r1[2].red +
+              r2[0].red + r2[1].red + r2[2].red;
+    int green = r0[0].green + r0[1].green + r0[2].green +
+                r1[0].green + r1[1].green + r1[2].green +
+                r2[0].green + r2[1].green + r2[2].green;
+    int blue = r0[0].blue + r0[1].blue + r0[2].blue +
+               r1[0].blue + r1[1].blue + r1[2].blue +
+               r2[0].blue + r2[1].blue + r2[2].blue;
+
+    for (j = 0; j < dim - 2; j++) {
+      d[j].red = (unsigned short)(red / 9);
+      d[j].green = (unsigned short)(green / 9);
+      d[j].blue = (unsigned short)(blue / 9);
+
+      if (j < dim - 3) {
+        red += r0[j + 3].red + r1[j + 3].red + r2[j + 3].red
+             - r0[j].red - r1[j].red - r2[j].red;
+        green += r0[j + 3].green + r1[j + 3].green + r2[j + 3].green
+               - r0[j].green - r1[j].green - r2[j].green;
+        blue += r0[j + 3].blue + r1[j + 3].blue + r2[j + 3].blue
+              - r0[j].blue - r1[j].blue - r2[j].blue;
+      }
+    }
+
+    /* The final two columns have smaller neighborhoods. */
+    red = r0[dim - 2].red + r0[dim - 1].red +
+          r1[dim - 2].red + r1[dim - 1].red +
+          r2[dim - 2].red + r2[dim - 1].red;
+    green = r0[dim - 2].green + r0[dim - 1].green +
+            r1[dim - 2].green + r1[dim - 1].green +
+            r2[dim - 2].green + r2[dim - 1].green;
+    blue = r0[dim - 2].blue + r0[dim - 1].blue +
+           r1[dim - 2].blue + r1[dim - 1].blue +
+           r2[dim - 2].blue + r2[dim - 1].blue;
+    d[dim - 2].red = (unsigned short)(red / 6);
+    d[dim - 2].green = (unsigned short)(green / 6);
+    d[dim - 2].blue = (unsigned short)(blue / 6);
+
+    red = r0[dim - 1].red + r1[dim - 1].red + r2[dim - 1].red;
+    green = r0[dim - 1].green + r1[dim - 1].green + r2[dim - 1].green;
+    blue = r0[dim - 1].blue + r1[dim - 1].blue + r2[dim - 1].blue;
+    d[dim - 1].red = (unsigned short)(red / 3);
+    d[dim - 1].green = (unsigned short)(green / 3);
+    d[dim - 1].blue = (unsigned short)(blue / 3);
+  }
+
+  /* Bottom two rows: their blocks are only two and one rows high. */
+  i = dim - 2;
+  for (j = 0; j < dim - 2; j++) {
+    int red = src[RIDX(i, j, dim)].red + src[RIDX(i, j + 1, dim)].red + src[RIDX(i, j + 2, dim)].red +
+              src[RIDX(i + 1, j, dim)].red + src[RIDX(i + 1, j + 1, dim)].red + src[RIDX(i + 1, j + 2, dim)].red;
+    int green = src[RIDX(i, j, dim)].green + src[RIDX(i, j + 1, dim)].green + src[RIDX(i, j + 2, dim)].green +
+                src[RIDX(i + 1, j, dim)].green + src[RIDX(i + 1, j + 1, dim)].green + src[RIDX(i + 1, j + 2, dim)].green;
+    int blue = src[RIDX(i, j, dim)].blue + src[RIDX(i, j + 1, dim)].blue + src[RIDX(i, j + 2, dim)].blue +
+               src[RIDX(i + 1, j, dim)].blue + src[RIDX(i + 1, j + 1, dim)].blue + src[RIDX(i + 1, j + 2, dim)].blue;
+    dst[RIDX(i, j, dim)].red = (unsigned short)(red / 6);
+    dst[RIDX(i, j, dim)].green = (unsigned short)(green / 6);
+    dst[RIDX(i, j, dim)].blue = (unsigned short)(blue / 6);
+  }
+
+  for (j = dim - 2; j < dim; j++) {
+    int width = dim - j;
+    int red = 0, green = 0, blue = 0;
+    int ii, jj;
+    for (ii = dim - 2; ii < dim; ii++)
+      for (jj = j; jj < dim; jj++) {
+        red += src[RIDX(ii, jj, dim)].red;
+        green += src[RIDX(ii, jj, dim)].green;
+        blue += src[RIDX(ii, jj, dim)].blue;
+      }
+    dst[RIDX(dim - 2, j, dim)].red = (unsigned short)(red / (2 * width));
+    dst[RIDX(dim - 2, j, dim)].green = (unsigned short)(green / (2 * width));
+    dst[RIDX(dim - 2, j, dim)].blue = (unsigned short)(blue / (2 * width));
+  }
+
+  i = dim - 1;
+  for (j = 0; j < dim - 2; j++) {
+    int red = src[RIDX(i, j, dim)].red + src[RIDX(i, j + 1, dim)].red + src[RIDX(i, j + 2, dim)].red;
+    int green = src[RIDX(i, j, dim)].green + src[RIDX(i, j + 1, dim)].green + src[RIDX(i, j + 2, dim)].green;
+    int blue = src[RIDX(i, j, dim)].blue + src[RIDX(i, j + 1, dim)].blue + src[RIDX(i, j + 2, dim)].blue;
+    dst[RIDX(i, j, dim)].red = (unsigned short)(red / 3);
+    dst[RIDX(i, j, dim)].green = (unsigned short)(green / 3);
+    dst[RIDX(i, j, dim)].blue = (unsigned short)(blue / 3);
+  }
+
+  for (j = dim - 2; j < dim; j++) {
+    int width = dim - j;
+    int red = 0, green = 0, blue = 0;
+    int jj;
+    for (jj = j; jj < dim; jj++) {
+      red += src[RIDX(dim - 1, jj, dim)].red;
+      green += src[RIDX(dim - 1, jj, dim)].green;
+      blue += src[RIDX(dim - 1, jj, dim)].blue;
+    }
+    dst[RIDX(dim - 1, j, dim)].red = (unsigned short)(red / width);
+    dst[RIDX(dim - 1, j, dim)].green = (unsigned short)(green / width);
+    dst[RIDX(dim - 1, j, dim)].blue = (unsigned short)(blue / width);
+  }
 }
 
 /********************************************************************* 
