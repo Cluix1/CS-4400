@@ -6,3 +6,8 @@ Tests run in Ubuntu WSL with the supplied driver and Makefile.
    Both short traces passed (`./mdriver -V -f traces/short1-bal.rep` and
    `./mdriver -V -f traces/short2-bal.rep`). Each allocation still maps a chunk
    at this stage; the next step is to reuse and split free blocks.
+
+2. Added a doubly linked free list and splitting (minimum block: 32 bytes).
+   Both short traces and all nine default traces passed. The full driver
+   reported 46% peak utilization, 27% instantaneous utilization, and index 23.
+   Coalescing and chunk growth are still missing at this checkpoint.
