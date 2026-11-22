@@ -124,13 +124,48 @@ void *mm_malloc(size_t size)
   return bp;
 }
 
+/* Neighbors are free-list members; bp has not been inserted yet. */
+static void *coalesce(void *bp)
+{
+  void *prev = PREV_BLKP(bp);
+  void *next = NEXT_BLKP(bp);
+  size_t size = GET_SIZE(HDRP(bp));
+  if (!GET_ALLOC(HDRP(prev))) {
+    remove_free(prev);
+    size += GET_SIZE(HDRP(prev));
+    bp = prev;
+  }
+  if (!GET_ALLOC(HDRP(next))) {
+    remove_free(next);
+    size += GET_SIZE(HDRP(next));
+  }
+  PUT(HDRP(bp), PACK(size, 0));
+  PUT(FTRP(bp), PACK(size, 0));
+  return bp;
+}
+
 void mm_free(void *ptr)
 {
   size_t size;
+  chunk *c;
   if (ptr == NULL)
     return;
   size = GET_SIZE(HDRP(ptr));
   PUT(HDRP(ptr), PACK(size, 0));
   PUT(FTRP(ptr), PACK(size, 0));
-  insert_free(ptr);
+  ptr = coalesce(ptr);
+  /* Both boundary blocks touch this block only when the chunk is empty. */
+  if (GET_SIZE(HDRP(PREV_BLKP(ptr))) == OVERHEAD &&
+      GET_SIZE(HDRP(NEXT_BLKP(ptr))) == 0) {
+    c = (chunk *)((char *)ptr - CHUNK_OVERHEAD);
+    if (c->prev != NULL)
+      c->prev->next = c->next;
+    else
+      chunk_head = c->next;
+    if (c->next != NULL)
+      c->next->prev = c->prev;
+    mem_unmap(c, c->size);
+  } else {
+    insert_free(ptr);
+  }
 }

@@ -11,3 +11,9 @@ Tests run in Ubuntu WSL with the supplied driver and Makefile.
    Both short traces and all nine default traces passed. The full driver
    reported 46% peak utilization, 27% instantaneous utilization, and index 23.
    Coalescing and chunk growth are still missing at this checkpoint.
+
+3. Added boundary-tag coalescing and release of completely empty chunks.
+   Both short traces and all nine default traces passed. Added a separate
+   heap checker and focused tests for split/reuse, all coalescing cases, and
+   page release. The tests passed with AddressSanitizer and UBSan enabled.
+   The checker stays in tests, so it adds no work to submitted mm.c.
