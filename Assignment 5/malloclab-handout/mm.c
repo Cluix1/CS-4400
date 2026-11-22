@@ -1,8 +1,14 @@
 /*
- * Explicit free list allocator. Blocks have size_t headers and footers.
- * Free blocks store two list pointers in their payload. Allocation splits
- * blocks when possible; freeing merges neighbors and releases empty chunks.
- * Each mapped chunk has its own boundary blocks, since chunks can be apart.
+ * Ryan Hoo
+ * u1511875
+ *
+ * Explicit free list allocator with size_t 
+ * headers and footers. Free blocks store prev/next pointers 
+ * right in their payload. Allocates by splitting oversized 
+ * blocks when worthwhile, and frees by coalescing adjacent 
+ * blocks and returning empty chunks to the OS. Each chunk 
+ * has its own boundary blocks since chunks can sit anywhere 
+ * in memory.
  */
 #include <stdint.h>
 #include "mm.h"
@@ -28,8 +34,9 @@ typedef struct chunk {
   size_t size;
 } chunk;
 
-/* Layout: chunk record | prologue header/footer | blocks | epilogue header.
- * On the 64-bit lab machines, the first payload starts at byte 48.
+/* Each chunk starts with its metadata record, followed by a prologue
+ * (header and footer), the usable blocks, and a trailing epilogue header.
+ * That overhead puts the first usable payload at byte 48 on 64-bit machines.
  */
 #define CHUNK_OVERHEAD (sizeof(chunk) + OVERHEAD + sizeof(size_t))
 #define MIN_BLOCK (OVERHEAD + 2 * sizeof(void *))
