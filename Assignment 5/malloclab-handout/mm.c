@@ -1,71 +1,68 @@
 /*
- * mm-naive.c - The least memory-efficient malloc package.
- * 
- * In this naive approach, a block is allocated by allocating a
- * new page as needed.  A block is pure payload. There are no headers or
- * footers.  Blocks are never coalesced or reused.
- *
- * NOTE TO STUDENTS: Replace this header comment with your own header
- * comment that gives a high level description of your solution.
+ * Explicit free list allocator. Blocks have size_t headers and footers.
+ * Each mapped chunk has its own boundary blocks, since chunks can be apart.
  */
-#include <stdio.h>
-#include <stdlib.h>
-#include <assert.h>
-#include <unistd.h>
-#include <string.h>
-
+#include <stdint.h>
 #include "mm.h"
 #include "memlib.h"
 
-/* always use 16-byte alignment */
 #define ALIGNMENT 16
+#define ALIGN(size) (((size) + (ALIGNMENT - 1)) & ~(size_t)(ALIGNMENT - 1))
+#define PAGE_ALIGN(size) (((size) + (page_size - 1)) & ~(page_size - 1))
+#define OVERHEAD (2 * sizeof(size_t))
+#define GET(p) (*(size_t *)(p))
+#define PUT(p, val) (*(size_t *)(p) = (val))
+#define PACK(size, alloc) ((size) | (alloc))
+#define GET_ALLOC(p) (GET(p) & 0x1)
+#define GET_SIZE(p) (GET(p) & ~(size_t)0xF)
+#define HDRP(bp) ((char *)(bp) - sizeof(size_t))
+#define FTRP(bp) ((char *)(bp) + GET_SIZE(HDRP(bp)) - OVERHEAD)
+#define NEXT_BLKP(bp) ((char *)(bp) + GET_SIZE(HDRP(bp)))
+#define PREV_BLKP(bp) ((char *)(bp) - GET_SIZE((char *)(bp) - OVERHEAD))
 
-/* rounds up to the nearest multiple of ALIGNMENT */
-#define ALIGN(size) (((size) + (ALIGNMENT-1)) & ~(ALIGNMENT-1))
+typedef struct chunk {
+  struct chunk *prev;
+  struct chunk *next;
+  size_t size;
+} chunk;
 
-/* rounds up to the nearest multiple of mem_pagesize() */
-#define PAGE_ALIGN(size) (((size) + (mem_pagesize()-1)) & ~(mem_pagesize()-1))
+/* Chunk record, allocated prologue, and epilogue header. */
+#define CHUNK_OVERHEAD (sizeof(chunk) + OVERHEAD + sizeof(size_t))
 
-void *current_avail = NULL;
-int current_avail_size = 0;
+static size_t page_size;
 
-/* 
- * mm_init - initialize the malloc package.
- */
 int mm_init(void)
 {
-  current_avail = NULL;
-  current_avail_size = 0;
-  
+  page_size = mem_pagesize();
   return 0;
 }
 
-/* 
- * mm_malloc - Allocate a block by using bytes from current_avail,
- *     grabbing a new page if necessary.
- */
 void *mm_malloc(size_t size)
 {
-  int newsize = ALIGN(size);
-  void *p;
-  
-  if (current_avail_size < newsize) {
-    current_avail_size = PAGE_ALIGN(newsize);
-    current_avail = mem_map(current_avail_size);
-    if (current_avail == NULL)
-      return NULL;
-  }
-
-  p = current_avail;
-  current_avail += newsize;
-  current_avail_size -= newsize;
-  
-  return p;
+  chunk *c;
+  void *bp;
+  size_t mapped;
+  if (size == 0 || size > SIZE_MAX - CHUNK_OVERHEAD - OVERHEAD - page_size)
+    return NULL;
+  mapped = PAGE_ALIGN(ALIGN(size + OVERHEAD) + CHUNK_OVERHEAD);
+  c = mem_map(mapped);
+  if (c == NULL)
+    return NULL;
+  c->size = mapped;
+  PUT((char *)c + sizeof(chunk), PACK(OVERHEAD, 1));
+  PUT((char *)c + sizeof(chunk) + sizeof(size_t), PACK(OVERHEAD, 1));
+  bp = (char *)c + CHUNK_OVERHEAD;
+  PUT(HDRP(bp), PACK(mapped - CHUNK_OVERHEAD, 1));
+  PUT(FTRP(bp), PACK(mapped - CHUNK_OVERHEAD, 1));
+  PUT(HDRP(NEXT_BLKP(bp)), PACK(0, 1));
+  return bp;
 }
 
-/*
- * mm_free - Freeing a block does nothing.
- */
 void mm_free(void *ptr)
 {
+  chunk *c;
+  if (ptr == NULL)
+    return;
+  c = (chunk *)((char *)ptr - CHUNK_OVERHEAD);
+  mem_unmap(c, c->size);
 }
