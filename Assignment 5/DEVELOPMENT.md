@@ -30,3 +30,34 @@ Tests run in Ubuntu WSL with the supplied driver and Makefile.
    Built a separate -pg driver and profiled random-bal.rep with gprof.
    mm_malloc accounted for 86% of sampled time, suggesting that first-fit
    searches through small fragments are worth improving.
+
+5. Compared size buckets and a bounded first-fit search. Neither improved the
+   combined score, so kept the simpler original first-fit list. Final checks:
+   both short traces passed; all nine default traces passed; the custom heap
+   checker and randomized tests passed with AddressSanitizer and UBSan.
+   The final normal run reported 77% utilization, 45% instantaneous utilization,
+   4,082 Kops/s, and performance index 58/100. This index is the driver's local
+   performance metric, not the assignment grade. It is below the assignment's
+   70-point full-credit threshold here; CADE performance has not been measured.
+   No driver, header, or Makefile changes are needed. Submit only mm.c.
+
+## Run the checks
+
+From `Assignment 5/malloclab-handout` in Linux (or Ubuntu WSL):
+
+```sh
+make
+./mdriver -V -f traces/short1-bal.rep
+./mdriver -V -f traces/short2-bal.rep
+./mdriver -l -v
+
+gcc -std=c11 -D_DEFAULT_SOURCE -g -Wall -Wextra -Werror \
+  -fsanitize=address,undefined ../tests/allocator_test.c memlib.c pagemap.c \
+  -o /tmp/allocator_test
+/tmp/allocator_test
+```
+
+The checker is in `tests/allocator_test.c`, which includes mm.c to inspect its
+private state. It checks boundary tags, alignment, chunk links, free-list links,
+coalescing, free-list membership, and total mapped bytes. Production allocator
+calls do not run the checker.
