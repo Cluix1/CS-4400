@@ -1,5 +1,7 @@
 /*
  * Explicit free list allocator. Blocks have size_t headers and footers.
+ * Free blocks store two list pointers in their payload. Allocation splits
+ * blocks when possible; freeing merges neighbors and releases empty chunks.
  * Each mapped chunk has its own boundary blocks, since chunks can be apart.
  */
 #include <stdint.h>
@@ -26,13 +28,16 @@ typedef struct chunk {
   size_t size;
 } chunk;
 
-/* Chunk record, allocated prologue, and epilogue header. */
+/* Layout: chunk record | prologue header/footer | blocks | epilogue header.
+ * On the 64-bit lab machines, the first payload starts at byte 48.
+ */
 #define CHUNK_OVERHEAD (sizeof(chunk) + OVERHEAD + sizeof(size_t))
 #define MIN_BLOCK (OVERHEAD + 2 * sizeof(void *))
 #define PREV_FREE(bp) (*(void **)(bp))
 #define NEXT_FREE(bp) (*(void **)((char *)(bp) + sizeof(void *)))
 
 static size_t page_size;
+static size_t next_chunk_size;
 static void *free_head;
 static chunk *chunk_head;
 
@@ -75,6 +80,7 @@ static void set_allocated(void *bp, size_t size)
 int mm_init(void)
 {
   page_size = mem_pagesize();
+  next_chunk_size = page_size;
   free_head = NULL;
   chunk_head = NULL;
   return 0;
@@ -84,11 +90,17 @@ static void *extend(size_t size)
 {
   chunk *c;
   void *bp;
-  size_t mapped;
-  mapped = PAGE_ALIGN(size + CHUNK_OVERHEAD);
+  size_t mapped, extra = size > next_chunk_size ? size : next_chunk_size;
+  /* Leave room for another request instead of mapping for every block. */
+  if (extra > SIZE_MAX - CHUNK_OVERHEAD - page_size - size)
+    return NULL;
+  mapped = PAGE_ALIGN(size + extra + CHUNK_OVERHEAD);
   c = mem_map(mapped);
   if (c == NULL)
     return NULL;
+  /* Grow gradually, but avoid keeping huge chunks for small requests. */
+  if (next_chunk_size < 32 * page_size)
+    next_chunk_size *= 2;
   c->size = mapped;
   c->prev = NULL;
   c->next = chunk_head;
@@ -108,7 +120,8 @@ static void *extend(size_t size)
 void *mm_malloc(size_t size)
 {
   void *bp;
-  if (size == 0 || size > SIZE_MAX - CHUNK_OVERHEAD - OVERHEAD - page_size)
+  if (size == 0 ||
+      size > SIZE_MAX - CHUNK_OVERHEAD - OVERHEAD - page_size - ALIGNMENT)
     return NULL;
   size = ALIGN(size + OVERHEAD);
   if (size < MIN_BLOCK)
@@ -165,6 +178,8 @@ void mm_free(void *ptr)
     if (c->next != NULL)
       c->next->prev = c->prev;
     mem_unmap(c, c->size);
+    if (chunk_head == NULL)
+      next_chunk_size = page_size;
   } else {
     insert_free(ptr);
   }

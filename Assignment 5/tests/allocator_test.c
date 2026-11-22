@@ -76,6 +76,75 @@ int main(void)
   mm_free(a); check(); /* Merge with next. */
   mm_free(d); check(); /* Merge both sides and release the chunk. */
   assert(mem_heapsize() == 0);
+
+  assert(mm_malloc(0) == NULL);
+  assert(mm_malloc(SIZE_MAX) == NULL);
+  assert(mm_malloc(SIZE_MAX / 2) == NULL);
+  assert(mm_malloc(SIZE_MAX - CHUNK_OVERHEAD - OVERHEAD - page_size) == NULL);
+  mm_free(NULL);
+  /* Consume the free block without leaving a fragment smaller than 32. */
+  a = mm_malloc(1);
+  {
+    size_t size = GET_SIZE(HDRP(free_head));
+    b = mm_malloc(size - OVERHEAD - ALIGNMENT);
+    assert(GET_SIZE(HDRP(b)) == size);
+  }
+  check();
+  mm_free(a); check();
+  mm_free(b); check();
+  assert(mem_heapsize() == 0);
+
+  /* Remove middle, head, and tail entries from the chunk list. */
+  a = mm_malloc(200000);
+  b = mm_malloc(200000);
+  c = mm_malloc(200000);
+  assert(a && b && c);
+  check();
+  mm_free(b); check();
+  mm_free(c); check();
+  mm_free(a); check();
+  assert(mem_heapsize() == 0);
+
+  {
+    void *slots[64] = {0};
+    size_t sizes[64] = {0};
+    int step, i;
+    srand(4400);
+    for (step = 0; step < 4000; step++) {
+      int slot = rand() % 64;
+      if (slots[slot] != NULL) {
+        for (size_t j = 0; j < sizes[slot]; j++)
+          assert(((unsigned char *)slots[slot])[j] == (unsigned char)slot);
+        mm_free(slots[slot]);
+        slots[slot] = NULL;
+      } else {
+        sizes[slot] = 1 + rand() % ((step % 19 == 0) ? 65536 : 8192);
+        slots[slot] = mm_malloc(sizes[slot]);
+        assert(slots[slot] != NULL);
+        memset(slots[slot], slot, sizes[slot]);
+      }
+      check();
+    }
+    for (i = 0; i < 64; i++) {
+      if (slots[i] != NULL) {
+        for (size_t j = 0; j < sizes[i]; j++)
+          assert(((unsigned char *)slots[i])[j] == (unsigned char)i);
+        mm_free(slots[i]);
+        check();
+      }
+    }
+    assert(mem_heapsize() == 0);
+  }
+
+  /* The driver resets memory before each new mm_init, even with live blocks. */
+  assert(mm_malloc(128) != NULL);
+  mem_reset();
+  assert(mm_init() == 0);
+  check();
+  a = mm_malloc(16);
+  assert(a != NULL);
+  mm_free(a);
+  check();
   puts("allocator tests passed");
   return 0;
 }
